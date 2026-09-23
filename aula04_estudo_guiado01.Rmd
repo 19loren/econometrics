@@ -1,0 +1,220 @@
+---
+title: "Estudo Guiado 01 — Hipóteses do RLS, RLM e Teorema de Gauss-Markov"
+subtitle: "Aula 4 · Preparação: as cinco hipóteses do RLS, a motivação para o RLM e o significado de BLUE/MELNV"
+author: "Guia de estudo da Loren Tavolaro"
+date: "`r format(Sys.Date(), '%d/%m/%Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    code_folding: show
+    theme: cosmo
+    highlight: tango
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, warning = FALSE, message = FALSE,
+  fig.align = "center", fig.width = 7, fig.height = 4.5
+)
+
+pacotes <- c("tidyverse", "wooldridge", "knitr")
+faltando <- pacotes[!(pacotes %in% installed.packages()[, "Package"])]
+if (length(faltando) > 0) {
+  install.packages(faltando, repos = "https://cloud.r-project.org")
+}
+
+library(tidyverse)
+library(wooldridge)
+library(knitr)
+
+theme_set(theme_minimal(base_size = 12))
+```
+
+# Como usar este guia
+
+Este documento é para **estudo individual antes da Aula 4**, sobre as hipóteses do modelo de regressão. Até agora sabemos *calcular* $\hat\beta_0$ e $\hat\beta_1$ (Aula 3) — hoje o objetivo é entender **sob quais condições** esses números são confiáveis.
+
+Tipos de bloco usados neste guia:
+
+- 🧠 **Verifique seu entendimento** — pergunta conceitual, sem cálculo.
+- 💻 **Exercício prático** — envolve rodar/completar código no R.
+
+Você vai completar este `.Rmd` diretamente. Cada bloco tem um **código de referência** entre colchetes (ex.: `[Q1-1]`, `[Ex2-1]`) — use-o para conferir sua resposta no **Gabarito 01**, disponibilizado separadamente após a atividade.
+
+---
+
+# 1 — As cinco hipóteses do RLS
+
+Relembre o modelo populacional: $y=\beta_0+\beta_1x+u$. As cinco hipóteses (Wooldridge, Seção 2.5) são:
+
+| Hipótese | Nome | Enunciado |
+|---|---|---|
+| RLS.1 | Linear nos parâmetros | $y=\beta_0+\beta_1x+u$ |
+| RLS.2 | Amostragem aleatória | Amostra aleatória do modelo em RLS.1 |
+| RLS.3 | Variação amostral em $x$ | $x_i$ não são todos iguais |
+| RLS.4 | Média condicional zero | $E(u\mid x)=0$ |
+| RLS.5 | Homocedasticidade | $\text{Var}(u\mid x)=\sigma^2$ |
+
+**🧠 Verifique seu entendimento `[Q1-1]`**
+
+> Por que RLS.3 (variação amostral em $x$) é necessária para que $\hat\beta_1=\dfrac{\sum_i(x_i-\bar x)(y_i-\bar y)}{\sum_i(x_i-\bar x)^2}$ sequer possa ser calculado? (Dica: pense no denominador se todo $x_i=\bar x$.)
+
+```{r resposta-Q1-1, eval=FALSE}
+# Sua resposta (Q1-1):
+#
+```
+
+**🧠 Verifique seu entendimento `[Q1-2]`**
+
+> Explique, com suas palavras, a diferença entre "o MQO é não-viesado" (garantido por RLS.1–RLS.4) e "o MQO tem a menor variância possível" (que exige também RLS.5). Por que são afirmações diferentes?
+
+```{r resposta-Q1-2, eval=FALSE}
+# Sua resposta (Q1-2):
+#
+```
+
+---
+
+# 2 — Viés de variável omitida: a motivação para o RLM
+
+Se o modelo verdadeiro é $y=\beta_0+\beta_1x_1+\beta_2x_2+u$, mas estimamos apenas $\tilde y=\tilde\beta_0+\tilde\beta_1x_1$ (esquecendo $x_2$), então:
+
+$$E(\tilde\beta_1) = \beta_1 + \beta_2\,\tilde\delta_1$$
+
+onde $\tilde\delta_1$ vem da regressão auxiliar $x_2$ em $x_1$.
+
+**💻 Exercício prático `[Ex2-1]`**
+
+Considere os dados abaixo, gerados sem ruído a partir de $y = 2 + 1\cdot x_1 + 4\cdot x_2$:
+
+```{r ex2-dados}
+x1 <- c(1, 2, 3, 4, 5)
+x2 <- c(5, 3, 6, 2, 4)
+y  <- 2 + 1 * x1 + 4 * x2
+```
+
+(i) Estime `lm(y ~ x1 + x2)` e confirme que recupera os coeficientes verdadeiros ($\beta_0=2$, $\beta_1=1$, $\beta_2=4$).
+
+(ii) Estime `lm(y ~ x1)` (omitindo $x_2$). O coeficiente de `x1` mudou? Para mais ou para menos que 1?
+
+(iii) Calcule $\tilde\delta_1$ com `lm(x2 ~ x1)` e verifique que $\hat\beta_1^{\text{múltipla}} + \hat\beta_2^{\text{múltipla}}\times\tilde\delta_1$ bate com o coeficiente de `x1` no modelo simples de (ii).
+
+```{r ex2, eval=FALSE}
+# (i)
+mod_mult <- lm(y ~ ___ + ___)
+coef(mod_mult)
+
+# (ii)
+mod_simp <- lm(y ~ ___)
+coef(mod_simp)
+
+# (iii)
+delta1 <- coef(lm(___ ~ ___))["x1"]
+coef(mod_mult)["___"] + coef(mod_mult)["___"] * delta1
+```
+
+---
+
+# 3 — As hipóteses do RLM e a novidade: colinearidade perfeita
+
+O modelo múltiplo é $y=\beta_0+\beta_1x_1+\cdots+\beta_kx_k+u$, com hipóteses RLM.1–RLM.5 (mais RLM.6, normalidade, usada só em inferência). A única hipótese **sem análogo** no RLS é **RLM.3 — ausência de colinearidade perfeita**: nenhuma $x_j$ pode ser combinação linear exata das demais.
+
+**💻 Exercício prático `[Ex3-1]`**
+
+Usando o dataset `wage2` (novo — ainda não usado nas aulas anteriores), tente estimar um modelo com uma variável e sua duplicata redundante:
+
+```{r ex3, eval=FALSE}
+data(wage2)
+
+wage2 <- wage2 %>% mutate(educ_dobro = educ * ___)   # exatamente o dobro de 'educ'
+
+mod_col <- lm(wage ~ educ + educ_dobro, data = wage2)
+coef(mod_col)
+
+# O que aparece para o coeficiente de educ_dobro? Por quê?
+# Sua resposta:
+#
+```
+
+**🧠 Verifique seu entendimento `[Q3-1]`**
+
+> Por que a colinearidade *perfeita* impede a estimação, mas variáveis apenas *fortemente correlacionadas* (não perfeitamente) ainda permitem estimar o modelo (ainda que com coeficientes menos precisos — assunto de uma aula futura)?
+
+```{r resposta-Q3-1, eval=FALSE}
+# Sua resposta (Q3-1):
+#
+```
+
+---
+
+# 4 — O Teorema de Gauss-Markov e o significado de BLUE
+
+Sob RLM.1–RLM.5, o MQO é o **B**est **L**inear **U**nbiased **E**stimator — **B**LUE, ou **MELNV** (Melhor Estimador Linear Não-Viesado).
+
+**🧠 Verifique seu entendimento `[Q4-1]`**
+
+> Explique, com suas próprias palavras, o significado de cada uma das três palavras em "melhor estimador **linear** **não-viesado**": (i) linear, (ii) não-viesado, (iii) melhor.
+
+```{r resposta-Q4-1, eval=FALSE}
+# Sua resposta (Q4-1):
+# (i) linear:
+# (ii) não-viesado:
+# (iii) melhor:
+```
+
+**🧠 Verifique seu entendimento `[Q4-2]`**
+
+> O Teorema de Gauss-Markov exige que $u$ siga uma distribuição Normal? Justifique com base nas hipóteses usadas no teorema (RLM.1–RLM.5 vs. RLM.6).
+
+```{r resposta-Q4-2, eval=FALSE}
+# Sua resposta (Q4-2):
+#
+```
+
+---
+
+# Autoavaliação final
+
+Antes da Aula 4, tente responder sem consultar o material:
+
+1. Liste as cinco hipóteses do RLS e diga, em uma frase cada, o que cada uma garante.
+***
+RLS1 - linearidade nos parametros: garante que o modelo seja linear nos parametros que queremos estimar.
+RLS2 - amostragem aleatoria: as observacoes sao obtidas de forma aleatoria da populacao, garantindo aue a amostra seja representativa sob as condicoes usuais.
+RLS3 - variacao amostral em x: a variavel explicativa x deve apresentar variacao na amostra, garantindo que seja possivel estimar uma inclinacao para ela.
+RLS4 - media condicional zero: garante que os fatores nao observados presentes no erro nao estejam sistematicamente relacionados com x, perimitindo que o MQO seja nao viesado.
+RLS5 - homocedasticidade: garante que a variancia do erro seja constante para todos os valores de x, sendo importante para a eficiencia do MQO e para as formulas usuais dos erros-padrao.
+***
+2. Escreva a fórmula do viés de variável omitida e explique quando ele é igual a zero.
+***
+b^1= b2.cov(x,z)/var(x), o vies sera igual a zero se a variavel que foi esquecida nao influencia o resultado ou nao tem relacao com a variavel explicativa.
+***
+3. Qual é a única hipótese do RLM sem análogo no RLS? Dê um exemplo concreto de sua violação.
+***
+a unica hipotese do RLM que nao possui analogo no RLS é a ausencia de multicolinearidade perfeita. ela significa que as variaveis explicativas do modelo nao podem ser combinacoes exatas umas das outras, pois isso impediria identificar separadamente o efeito de cada variavel sobre y, por exemplo, em um modelo que tenta explicar o salario usando educacao e anos de estudo, se os anos de estudo forem exatamente iguais à educacao-12 para todas as pessoas, as duas variaveis terao uma relacao perfeita e nao sera possivel identificar separadamente o efeito de cada uma sobre o salario.
+***
+4. Enuncie o Teorema de Gauss-Markov com suas próprias palavras.
+***
+sob as condicoes necessarias do modelo, o estimador de MQO é o melhor estimador linear nao viesado, ou seja, entre os estimadores lineares que sao nao viesados, o MQO é aquele que apresenta a menor variancia.
+***
+5. Diferencie "MQO é não-viesado" de "MQO é BLUE" — quais hipóteses cada afirmação exige?
+***
+MQO é nao viesado significa que, em media, o estimador consegue chegar ao verdadeiro valor do parametro, para isso, precisamos das hipoteses RLS1 a RLS5, principalmente a condicao de media condicional zero.
+já dizer que MQO é BLUE significa que ele é o MELHOR estimador linear nao viesado, ou seja, possui a menor variancia entre os estimadores lineares nao viesados. para isso, precisamos tambem da hipotese de homocedasticidade, entao sao necessarias as hipoteses RLS1 a RLS5.
+***
+
+```{r termos-chave, echo=FALSE}
+tibble::tibble(
+  Termo = c("RLS.1–RLS.5", "RLM.1–RLM.6", "Viés de variável omitida",
+            "Colinearidade perfeita", "Exogeneidade", "Homocedasticidade",
+            "Teorema de Gauss-Markov", "BLUE / MELNV")
+) %>%
+  knitr::kable(caption = "Termos-chave desta preparação — use para autoavaliação")
+```
+
+---
+
+*Pronto! Com este guia você está preparado(a) para a **Aula 4 — Hipóteses do Modelo Clássico**. O gabarito deste guia será disponibilizado separadamente.*

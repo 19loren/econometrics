@@ -1,0 +1,281 @@
+---
+title: "Lei de Okun: Análise Empírica e Dinâmica de Mercado de Trabalho"
+author: "Loren Tavolaro"
+subtitle: "Exercício Prático de Econometria com Dados do FRED via tidyquant"
+output:
+  html_document:
+    theme: flatly
+    highlight: tango
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    code_folding: show
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.align = "center")
+```
+
+## Fundamentação Teórica: A Lei de Okun
+
+A Lei de Okun é uma regularidade empírica fundamental na macroeconomia, observada inicialmente pelo economista Arthur Okun em 1962 . Esta lei postula a existência de uma relação inversamente proporcional entre o crescimento do Produto Interno Bruto (PIB) e a variação da taxa de desemprego. Do ponto de vista teórico, em períodos de expansão econômica acelerada, a demanda por trabalho aumenta, reduzindo o desemprego. Reciprocamente, quando o crescimento econômico é fraco ou negativo (recessão), a taxa de desemprego tende a se elevar.
+
+A formulação econométrica mais simples para testar essa relação assume a forma de um modelo de regressão linear simples (Mínimos Quadrados Ordinários - MQO):
+
+$$ \Delta U_t = \beta_0 + \beta_1 g_{Y,t} + \varepsilon_t $$
+
+Onde:
+* $\Delta U_t$ representa a variação na taxa de desemprego no período $t$.
+* $g_{Y,t}$ representa a taxa de crescimento do PIB real no período $t$.
+* $\beta_0$ é o intercepto (frequentemente interpretado como a variação do desemprego quando o crescimento é zero).
+* $\beta_1$ é o **Coeficiente de Okun**, que mensura a sensibilidade do mercado de trabalho ao crescimento econômico.
+* $\varepsilon_t$ é o termo de erro aleatório.
+
+A teoria macroeconômica antecipa que $\beta_1$ assuma um valor negativo. A magnitude deste coeficiente (elasticidade) varia significativamente entre os países, dependendo de fatores institucionais, como a flexibilidade da legislação trabalhista para contratações e demissões.
+
+---
+
+## Configuração do Ambiente e Pacotes
+
+Para garantir a reprodutibilidade da análise e a manipulação adequada de séries temporais, utilizaremos os seguintes pacotes:
+
+```{r pacotes}
+# O pacote pacman facilita a instalação e o carregamento simultâneo de múltiplos pacotes
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+
+pacman::p_load(
+  tidyquant,   # Extração integrada de séries financeiras e econômicas (FRED)
+  dplyr,       # Manipulação de dados
+  tidyr,       # Limpeza e organização de dados
+  ggplot2,     # Visualização de dados de alta qualidade
+  lubridate,   # Manipulação de datas
+  zoo,         # Operações avançadas com séries temporais
+  scales       # Formatação de eixos em gráficos
+)
+```
+
+---
+
+## Parâmetros de Seleção de País
+
+O script abaixo contém uma lista de países numerada de 1 a 11. Para conduzir a análise empírica para diferentes economias, altere o valor atribuído ao objeto `escolha` e recompile o documento (clique em *Knit* novamente).
+
+```{r pais}
+# Dicionário de países disponíveis na base de dados
+paises <- c("US", "GB", "DE", "FR", "JP", "CA", "IT", "ES", "KR", "AU", "MX")
+nomes  <- c("Estados Unidos", "Reino Unido", "Alemanha", "França", "Japão",
+            "Canadá", "Itália", "Espanha", "Coreia do Sul", "Austrália", "México")
+
+# ==============================================================================
+# INSTRUÇÃO PARA O ALUNO:
+# Altere o número abaixo para selecionar outro país.
+# 1 = EUA, 2 = Reino Unido, 3 = Alemanha, 4 = França, 5 = Japão,
+# 6 = Canadá, 7 = Itália, 8 = Espanha, 9 = Coreia do Sul, 10 = Austrália, 11 = México
+# ==============================================================================
+escolha <- 2
+
+pais <- paises[escolha]
+nome_pais <- nomes[escolha]
+
+cat("País selecionado para a análise estimativa:", nome_pais, "(", pais, ")\n")
+```
+
+---
+
+## Guia de Acesso: O Pacote `tidyquant`
+
+O pacote `tidyquant` integra o ecossistema `tidyverse` a rotas públicas de dados de mercado e indicadores macroeconômicos. Em vez de ler arquivos estáticos salvos na nuvem, ele faz a requisição direta aos servidores públicos do FRED (*Federal Reserve Economic Data*) sem a necessidade de cadastro de chaves de API.
+
+A principal função de coleta é a `tq_get()`. Seus parâmetros operam da seguinte forma:
+
+* **`x`**: Representa o código identificador (mnemônico) do indicador no banco de dados. No nosso caso, montamos os códigos internacionalmente padronizados:
+  * Desemprego Harmonizado: `LRHUTTTT` + código do país + `M156S`.
+  * PIB Real: `NGDPRSAXDC` + código do país + `Q`.
+* **`get = "economic.data"`**: Instrução que direciona o mecanismo de busca do pacote para o repositório macroeconômico do FRED.
+* **`from`**: Data inicial para recorte da série temporal (e.g., `"1995-01-01"`).
+* **Estrutura de saída**: A função sempre retorna um *tibble* (tabela de dados) contendo duas colunas padronizadas: `date` (com a cronologia das observações) e `price` (que armazena os valores numéricos da série econômica requisitada).
+
+---
+
+## Extração e Tratamento dos Dados via `tidyquant`
+
+As séries temporais utilizadas neste exercício são extraídas diretamente do banco de dados FRED:
+
+1. **Taxa de Desemprego Harmonizada:** Calculada com base na metodologia da OCDE para garantir a comparabilidade internacional.. Trata-se de uma série de frequência mensal, expressa em percentual (%) e dessazonalizada .
+2. **Produto Interno Bruto (PIB) Real:** Compilado a partir dos dados do FMI (Fundo Monetário Internacional). A série apresenta frequência trimestral, com ajuste sazonal, e é mensurada em milhões da moeda local a preços constantes (descontando o efeito inflacionário).
+
+**Nota Metodológica:** Como o PIB é mensurado na moeda local, o nível absoluto da série não é diretamente comparável entre diferentes nações (e.g., Ienes vs. Dólares). Para contornar essa barreira dimensional e focar na dinâmica da taxa de crescimento, modelamos a relação utilizando a **variação percentual** do produto.
+
+```{r coleta}
+# Construção dinâmica dos mnemônicos do FRED de acordo com o país escolhido
+id_desemprego <- paste0("LRHUTTTT", pais, "M156S")
+id_pib <- paste0("NGDPRSAXDC", pais, "Q")
+
+# Coleta direta da série de desemprego via tidyquant
+desemprego_raw <- tq_get(
+  x = id_desemprego,
+  get = "economic.data",
+  from = "1995-01-01"
+)
+
+# Padronização de colunas (renomeando price para desemprego)
+desemprego <- desemprego_raw |>
+  select(data = date, desemprego = price) |>
+  dplyr::filter(!is.na(desemprego))
+
+# Coleta direta da série de PIB via tidyquant
+pib_raw <- tq_get(
+  x = id_pib,
+  get = "economic.data",
+  from = "1995-01-01"
+)
+
+# Padronização de colunas (renomeando price para pib)
+pib <- pib_raw |>
+  select(data = date, pib = price) |>
+  dplyr::filter(!is.na(pib))
+```
+
+### Agregação Temporal e Transformação Diferencial
+
+Como as bases possuem periodicidades distintas (mensal e trimestral), agregaremos a taxa de desemprego calculando a média mensal de cada trimestre. Em seguida, para mitigar efeitos de sazonalidade residual, calcularemos a variação de ambas as séries na mesma base temporal: comparando o período corrente com o mesmo trimestre do ano anterior ($t$ contra $t-4$).
+
+```{r prepara}
+# Transformação do desemprego de mensal para trimestral (média do trimestre)
+desemprego_trimestral <- desemprego |>
+  mutate(trimestre = as.Date(as.yearqtr(data))) |>
+  group_by(trimestre) |>
+  summarise(desemprego = mean(desemprego, na.rm = TRUE)) |>
+  ungroup()
+
+# Fusão das bases e cálculo das defasagens (lags) anuais (4 trimestres)
+dados <- pib |>
+  rename(trimestre = data) |>
+  inner_join(desemprego_trimestral, by = "trimestre") |>
+  arrange(trimestre) |>
+  mutate(
+    # g_Y: Taxa de crescimento do PIB YoY (%)
+    crescimento_pib = (pib / dplyr::lag(pib, 4) - 1) * 100, 
+    # Delta_U: Variação absoluta da taxa de desemprego YoY (pontos percentuais)
+    delta_desemprego = desemprego - dplyr::lag(desemprego, 4) 
+  ) |>
+  dplyr::filter(!is.na(crescimento_pib), !is.na(delta_desemprego))
+
+head(dados)
+```
+
+---
+
+## Análise Exploratória de Dados (AED)
+
+Antes de modelar a relação bivariada, é imperativo observar o comportamento univariado das séries temporais para identificar rupturas estruturais (quebras), ciclos econômicos e a magnitude de choques exógenos.
+
+### Evolução do PIB Real
+
+```{r serie-pib, fig.width=10, fig.height=5}
+ggplot(dados, aes(x = trimestre, y = pib)) +
+  geom_line(color = "#1f497d", size = 1) + # Azul marinho forte para contraste
+  geom_vline(xintercept = as.Date("2020-01-01"), color = "#c00000", linetype = "dashed", size = 0.8) +
+  annotate("text", x = as.Date("2019-09-01"), y = max(dados$pib, na.rm = TRUE) * 0.95, 
+           label = "Choque Pandêmico (2020)", color = "#c00000", hjust = 1, fontface = "bold") +
+  scale_y_continuous(labels = scales::label_number(big.mark = ".", decimal.mark = ",")) +
+  labs(x = "Ano / Trimestre", y = "PIB Real (Nível Bruto)", 
+       title = paste("Trajetória Macroeconômica (PIB Real) -", nome_pais)) +
+  theme_bw(base_size = 14) +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+### Trajetória da Taxa de Desemprego
+
+```{r serie-desemprego, fig.width=10, fig.height=5}
+ggplot(dados, aes(x = trimestre, y = desemprego)) +
+  geom_line(color = "#e36c0a", size = 1) +
+  geom_vline(xintercept = as.Date("2020-01-01"), color = "#c00000", linetype = "dashed", size = 0.8) +
+  labs(x = "Ano / Trimestre", y = "Taxa de Desemprego (%)", 
+       title = paste("Dinâmica do Mercado de Trabalho -", nome_pais)) +
+  theme_bw(base_size = 14) +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+*Análise Gráfica:* Observe como choques exógenos severos, como as medidas de contenção da pandemia de Covid-19 no início de 2020, causam anomalias abruptas em ambas as séries de forma espelhada (quedas súbitas no PIB e picos verticais no desemprego). O comportamento clássico de crises anteriores costuma apresentar oscilações mais graduais.
+
+---
+
+## Estimação do Modelo e Ajuste Linear
+
+Agora vamos visualizar a relação direta (dispersão cruzada) e ajustar a reta de regressão linear. Cada coordenada (ponto) reflete o desempenho da economia em um trimestre específico.
+
+A inclinação da reta ajustada ($\beta_1$) evidenciará o Coeficiente de Okun empírico para o país selecionado. Se a teoria se confirmar, essa linha deve descer da esquerda para a direita (trimestres com mais crescimento do PIB tendem a vir acompanhados de queda no desemprego, e vice-versa). Quanto mais próximos da linha os pontos estiverem, mais forte e robusta é a relação funcional.
+
+```{r grafico-okun, fig.width=8, fig.height=6}
+ggplot(dados, aes(x = crescimento_pib, y = delta_desemprego)) +
+  geom_point(alpha = 0.6, color = "#1f497d", size = 2.5) +
+  geom_smooth(method = "lm", se = TRUE, color = "#e36c0a", fill = "gray80", size = 1.2) +
+  geom_hline(yintercept = 0, linetype = "solid", color = "black", size = 0.5) +
+  geom_vline(xintercept = 0, linetype = "solid", color = "black", size = 0.5) +
+  labs(
+    x = "Crescimento do PIB real (variação em 4 trimestres, %)",
+    y = "Variação do desemprego (variação em 4 trimestres, p.p.)",
+    title = paste("Teste Empírico da Lei de Okun -", nome_pais),
+    subtitle = "Dispersão e Reta de Regressão Linear Ajustada"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+### Resultados da Regressão (MQO)
+
+Executaremos a função `lm()` (Linear Model) para obter os estimadores estatísticos:
+
+```{r modelo}
+# Ajuste do modelo de regressão linear
+modelo <- lm(delta_desemprego ~ crescimento_pib, data = dados)
+
+# Resumo estatístico
+summary(modelo)
+```
+
+---
+
+## Diagnóstico e Interpretação Dinâmica
+
+```{r extracao-dados-modelo, include=FALSE}
+# Ocultamos este chunk apenas para extrair os dados e gerar um texto dinâmico para o aluno.
+beta_1 <- coef(modelo)["crescimento_pib"]
+p_valor <- summary(modelo)$coefficients["crescimento_pib", "Pr(>|t|)"]
+r_quadrado <- summary(modelo)$r.squared
+
+# Condicionais para a explicação textual dinâmica
+significativo <- ifelse(p_valor < 0.05, "é estatisticamente significativo", "NÃO é estatisticamente significativo")
+sinal_ok <- ifelse(beta_1 < 0, "negativo, corroborando a teoria econômica esperada", "positivo, o que contraria a intuição fundamental da Lei de Okun")
+```
+
+Ao processar a base de dados de **`r nome_pais`**, os resultados econométricos apontam para a seguinte estrutura analítica:
+
+1. **Coeficiente Estimado ($\beta_1$):** O valor estimado para o coeficiente associado ao crescimento do PIB foi de **`r round(beta_1, 3)`**. Este coeficiente possui sinal `r sinal_ok`. Em termos práticos, isso significa que para cada 1 ponto percentual adicional de crescimento no PIB de `r nome_pais`, a variação da taxa de desemprego sofre uma alteração média de `r round(beta_1, 3)` pontos percentuais.
+2. **Significância Estatística (Valor-p):** Com um p-valor de `r formatC(p_valor, format = "e", digits = 2)`, conclui-se que o coeficiente `r significativo` a um nível de significância de 5% ($\alpha = 0.05$).
+3. **Poder Explicativo ($R^2$):** O coeficiente de determinação ($R^2$) foi de **`r round(r_quadrado, 3)`**. Isso indica que `r round(r_quadrado * 100, 1)`% da variância observada nas oscilações da taxa de desemprego de `r nome_pais` pode ser explicada pelas flutuações no crescimento do PIB local.
+
+---
+
+## Atividade Analítica Dirigida
+
+Volte ao bloco de código intitulado `Parâmetros de Seleção de País` no início do documento, altere a variável `escolha` para investigar o comportamento em outras economias e recompile (*Knit*) o arquivo. Após gerar o novo relatório, responda argumentativamente:
+
+1. **Validação Teórica:** O sinal do coeficiente de crescimento econômico manteve-se negativo, conforme previsto pelos modelos macroeconômicos tradicionais?
+***
+sim. o coeficiente estimado para o crescimento do PIB foi de -0,081, apresentando sinal negativo, como previsto pela lei de okun. isso indica que, em periodos de maior crescimento economico, a variaçao da taxa de desemprego tende a ser menor.
+***
+2. **Rigor Estatístico:** O teste *t* indica que a estimativa é estatisticamente diferente de zero (p-valor < 0.05)?
+***
+sim. o p-valor do coeficiente foi de 1,93 × 10^-8, sendo bastante inferior ao nivel de significancia de 5%. dessa forma, o coeficiente é estatisticamente significativo e podemos rejeitar a hipotese de que a relaçao entre o crescimento do PIB e a variaçao do desemprego seja igual a zero.
+***
+3. **Avaliação Comparativa de Mercado:** Compare os resultados ($R^2$ e magnitude de $\beta_1$) do país que você selecionou agora com os **Estados Unidos** (escolha 1). A relação é mais elástica (forte) ou inelástica (fraca)?
+***
+comparando os resultados, a relacao entre o crescimento do pib e a variacao do desemprego e mais forte nos estados unidos do que no reino unido. o coeficiente de okun dos eua foi de -0,634, enquanto o do reino unido foi de -0,081. isso significa que o desemprego nos estados unidos apresenta uma resposta maior as variacoes no crescimento do pib. alem disso, o r² dos eua foi de 0,679, contra 0,232 no reino unido, indicando que o crescimento do pib explica uma parcela consideravelmente maior da variacao do desemprego nos estados unidos. portanto, a relacao pode ser considerada mais elastica e com maior poder explicativo nos eua.
+***
+4. **Provocação Econômica:** Fundamente uma hipótese institucional sobre o porquê de o coeficiente de Okun ($\beta_1$) diferir em magnitude entre os países analisados. Leve em consideração conceitos como: custo de demissão, leis de proteção ao emprego e prevalência de contratos temporários.
+***
+uma possivel explicacao para a diferenca na magnitude do coeficiente de okun entre os paises esta nas caracteristicas de seus mercados de trabalho. paises com maiores custos de demissao e maior protecao ao emprego podem apresentar uma resposta menor do desemprego as mudancas no pib, ja que as empresas tendem a manter seus trabalhadores mesmo em periodos de desaceleracao. por outro lado, mercados com maior flexibilidade nas contratacoes e demissoes, alem de maior utilizacao de contratos temporarios, podem apresentar uma resposta mais rapida do emprego as mudancas na atividade economica. isso pode ajudar a explicar por que os estados unidos apresentam um coeficiente de okun de maior magnitude em comparacao ao reino unido.
+***
