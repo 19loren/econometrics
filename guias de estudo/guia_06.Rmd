@@ -1,0 +1,224 @@
+---
+title: "Estudo Guiado 01 — SQT, SQE, SQR e R²"
+subtitle: "Aula 6 · Preparação: decomposição da variação, definição de R² e de R² ajustado"
+author: "Guia de estudo da Loren Tavolaro"
+date: "`r format(Sys.Date(), '%d/%m/%Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    code_folding: show
+    theme: cosmo
+    highlight: tango
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, warning = FALSE, message = FALSE,
+  fig.align = "center", fig.width = 7, fig.height = 4.5
+)
+
+pacotes <- c("tidyverse", "wooldridge", "knitr")
+faltando <- pacotes[!(pacotes %in% installed.packages()[, "Package"])]
+if (length(faltando) > 0) {
+  install.packages(faltando, repos = "https://cloud.r-project.org")
+}
+
+library(tidyverse)
+library(wooldridge)
+library(knitr)
+
+theme_set(theme_minimal(base_size = 12))
+```
+
+# Como usar este guia
+
+Este documento é para **estudo individual antes da Aula 6**, sobre medidas de qualidade do ajuste. Você já sabe estimar $\hat\beta_0,\hat\beta_1,\dots$ (Aula 3) e sob quais hipóteses eles são confiáveis (Aula 4) — hoje a pergunta é: **quão bem** o modelo estimado se ajusta aos dados observados?
+
+Tipos de bloco usados neste guia:
+
+- 🧠 **Verifique seu entendimento** — pergunta conceitual, sem cálculo.
+- 💻 **Exercício prático** — envolve rodar/completar código no R.
+- ✍️ **Complete a derivação** — um passo algébrico para você preencher.
+
+Você vai completar este `.Rmd` diretamente. Cada bloco tem um **código de referência** entre colchetes (ex.: `[Q1-1]`, `[Ex2-1]`) — use-o para conferir sua resposta no **Gabarito 01**, disponibilizado separadamente após a atividade.
+
+---
+
+# 1 — Decompondo a variação: SQT, SQE, SQR
+
+Para cada observação, $y_i - \bar y = (\hat y_i - \bar y) + \hat u_i$ — o desvio total se decompõe em "parte explicada pelo modelo" mais "resíduo".
+
+**✍️ Complete a derivação `[D1-1]`**
+
+Eleve ao quadrado ambos os lados de $y_i-\bar y=(\hat y_i-\bar y)+\hat u_i$ e some sobre $i=1,\dots,n$. Você deve obter três termos: $\sum_i(\hat y_i-\bar y)^2$, $\sum_i\hat u_i^2$, e um termo cruzado $2\sum_i(\hat y_i-\bar y)\hat u_i$.
+
+```{r resposta-D1-1, eval=FALSE}
+# Sua resposta (D1-1) — escreva os três termos da expansão:
+# sum((yi - y)^2) = sum((yi - y)^2) + 2*sum((yi - y)*ui) + sum(u^2)
+```
+
+**🧠 Verifique seu entendimento `[Q1-1]`**
+
+> O termo cruzado que você identificou em `[D1-1]` desaparece na soma. Usando as propriedades algébricas do MQO vistas na Aula 3 ($\sum_i\hat u_i=0$ e $\sum_i x_i\hat u_i=0$), explique por que $\sum_i(\hat y_i-\bar y)\hat u_i = 0$. (Dica: $\hat y_i = \hat\beta_0+\hat\beta_1 x_i$; distribua o produto.)
+
+```{r resposta-Q1-1, eval=FALSE}
+# Sua resposta (Q1-1):
+# o termo cruzado é igual a zero porque sum(ui) = 0 e sum(xi * ui) = 0 pelas propriedades do MQO. como yi = b0 + b1*xi, podemos distribuir o produto e os dois termos resultantes sao iguais a zero. entao, sum((yi - y)*ui) = 0
+```
+
+---
+
+# 2 — Calculando R² na mão
+
+Considere os dados:
+
+| $i$ | $X_i$ | $Y_i$ |
+|---|---|---|
+| 1 | 2 | 4 |
+| 2 | 4 | 5 |
+| 3 | 6 | 9 |
+| 4 | 8 | 8 |
+| 5 | 10 | 12 |
+
+**💻 Exercício prático `[Ex2-1]`**
+
+(i) Estime `lm(Y ~ X)` e obtenha os valores ajustados $\hat Y_i$ e os resíduos $\hat u_i$.
+
+(ii) Calcule SQT, SQE e SQR manualmente (com `sum()`), e confira a identidade $\text{SQT}=\text{SQE}+\text{SQR}$.
+
+(iii) Calcule $R^2$ de duas formas — $\text{SQE}/\text{SQT}$ e $1-\text{SQR}/\text{SQT}$ — e confirme que batem com `summary(mod)$r.squared`.
+
+```{r ex2, eval=FALSE}
+X <- c(2, 4, 6, 8, 10)
+Y <- c(4, 5, 9, 8, 12)
+
+mod <- lm(Y ~ X)
+Yhat <- fitted(mod)
+resid_mod <- resid(mod)
+Ybar <- mean(Y)
+
+# (ii)
+SQT <- sum((Y - Ybar)^2)
+SQE <- sum((Yhat^ - Ybar)^2)
+SQR <- sum(resid_mod^2)
+c(SQT = SQT, SQE = SQE, SQR = SQR, "SQE+SQR" = SQE + SQR)
+
+# (iii)
+R2_v1 <- SQE /SQT
+R2_v2 <- 1 - SQR / SQT
+c(R2_v1 = R2_v1, R2_v2 = R2_v2, R2_lm = summary(mod)$r.squared)
+```
+
+---
+
+# 3 — R² e regressores adicionais
+
+**🧠 Verifique seu entendimento `[Q3-1]`**
+
+> Explique, com suas próprias palavras (sem fórmulas), por que $R^2$ nunca **diminui** quando adicionamos uma nova variável explicativa a um modelo de MQO — mesmo que essa variável seja, na prática, irrelevante para explicar $y$.
+
+```{r resposta-Q3-1, eval=FALSE}
+# Sua resposta (Q3-1):
+# o $r^2$ nunca diminui ao adicionar uma nova variavel porque o modelo passa a ter mais uma informaçao que pode ser usada para explicar y. se a nova variavel for irrelevante, o MQO pode dar um coeficiente proximo de zero, ou seja, o ajuste nao piora
+```
+
+**💻 Exercício prático `[Ex3-1]`**
+
+Usando `meap93` (desempenho escolar de escolas de Michigan — dataset novo), compare o $R^2$ de `math10 ~ expend` com o de `math10 ~ expend + lnchprg` (percentual de alunos no programa de merenda subsidiada, uma *proxy* de nível socioeconômico).
+
+```{r ex3, eval=FALSE}
+data(meap93)
+
+mod_a <- lm(math10 ~ expend, data = meap93)
+mod_b <- lm(math10 ~ expend + lnchprg, data = meap93)
+
+c(R2_a = summary(mod_a)$r.squared, R2_b = summary(mod_b)$r.squared)
+
+# O R2 do modelo B é maior, igual ou menor que o de A? Isso já era esperado?
+# Sua resposta:
+# o $r^2$ do modelo b é maior ou igual ao de a, como esperado. isso acontece porque adc um regressor nao pode reduzir o $r^2$
+```
+
+---
+
+# 4 — R² ajustado
+
+$$\bar R^2 = 1-(1-R^2)\frac{n-1}{n-k-1}$$
+
+**✍️ Complete a derivação `[D4-1]`**
+
+Se $k$ aumenta (mais regressores) e $R^2$ permanece **exatamente igual** (a nova variável não ajuda nada), o que acontece com $n-k-1$? E, portanto, com $\bar R^2$ — ele sobe, desce ou fica igual?
+
+```{r resposta-D4-1, eval=FALSE}
+# Sua resposta (D4-1):
+# quando k aumenta, o termo n-k-1 diminui, se o $r^2$ permanece igual, a penalizaçao aumenta e o $r^2$ ajustado diminui. desse modo, o $r^2$ ajustado pode diminuir quando adicionamos uma variavel que nao melhora o ajuste do modelo.
+```
+
+**💻 Exercício prático `[Ex4-1]`**
+
+Retome os dois modelos do `[Ex3-1]`. Compare agora o $R^2$ ajustado dos dois.
+
+```{r ex4, eval=FALSE}
+c(R2adj_a = summary(mod_a)$adj.r.squared, R2adj_b = summary(mod_b)$adj.r.squared)
+
+# O R2 ajustado subiu, desceu, ou ficou (quase) igual ao incluir lnchprg?
+# O que isso sugere sobre a relevância dessa variável, em comparação com o R2 simples?
+# Sua resposta:
+# o $r^2$ ajustado do modelo a é aprox 3,06%, enquanto o do modelo b é aprox 17,81%. Como o $r^2$ ajustado aumentou apos adicionar lnchprg,a nova variavel melhorou o ajuste do modelo o suficiente p compensar a penalizaçao pela inclusao de um regressor.
+```
+
+---
+
+# 5 — Limitações do R²
+
+**🧠 Verifique seu entendimento `[Q5-1]`**
+
+> Um colega afirma: "meu modelo tem $R^2=0{,}95$, então ele com certeza captura a relação causal correta entre $x$ e $y$". Aponte **dois** motivos pelos quais essa afirmação está equivocada.
+
+```{r resposta-Q5-1, eval=FALSE}
+# Sua resposta (Q5-1):
+# Motivo 1:um $r^2$ alto nao garante que exista uma relaçao causal entre x e y.
+# Motivo 2:um $r^2$ alto nao garante que nao existam variaveis importantes omitidas ou outros poblemas de especificacao no modelo
+```
+
+---
+
+# Autoavaliação final
+
+Antes da Aula 6, tente responder sem consultar o material:
+
+1. Escreva a identidade $\text{SQT}=\text{SQE}+\text{SQR}$ e explique, em uma frase, o que cada termo representa.
+***
+SQT = SQE + SQR, SQT representa a variacao total de y, SQE representa a parte da variacao de y explicada pelo modelo e, SQR representa a parte da variacao de y que nao é explicada pelo modelo.
+***
+2. Defina $R^2$ de duas formas equivalentes.
+***
+$r^2$ = SQE/SQT e $r^2$ = 1 - SQR/SQT
+***
+3. Por que $R^2$ nunca diminui ao adicionar regressores? E por que $\bar R^2$ pode diminuir?
+***
+$r^2$ nunca diminui ao adicionar regressores porque o modelo ganha mais uma variavel para tentar explicar y e porque pode simplesmente dar um coeficiente proximo de zero para uma variavel que nao ajuda. o $\bar r^2$ pode diminuir porque ele penaliza a inclusao de novos regressores quando eles nao melhoram suficientemente o modelo.
+***
+4. Cite duas coisas que um $R^2$ alto **não** garante.
+***
+nao garante que exista uma relacao causal entre as variaveis e também nao garante que nao existam variaveis importantes omitidas ou outros problemas no modelo.
+***
+5. Por que $R^2$ e $\bar R^2$ só podem ser comparados entre modelos com a mesma variável dependente?
+***
+o $r^2$ mede a proporcao da variavel dependente que é explicada pelo modelo. por isso, para comparar od dois é necessario que eles tenham a mesma variavel dependente, caso contrario estariamos comparando proporcoes de variacoes diferentes.
+***
+```{r termos-chave, echo=FALSE}
+tibble::tibble(
+  Termo = c("SQT (Soma dos Quadrados Totais)", "SQE (Soma dos Quadrados Explicados)",
+            "SQR (Soma dos Quadrados dos Resíduos)", "R²", "R² ajustado",
+            "Graus de liberdade", "Superajuste")
+) %>%
+  knitr::kable(caption = "Termos-chave desta preparação — use para autoavaliação")
+```
+
+---
+
+*Pronto! Com este guia você está preparado(a) para a **Aula 6 — Medidas de Qualidade do Ajuste**. O gabarito deste guia será disponibilizado separadamente.*

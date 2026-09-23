@@ -1,0 +1,195 @@
+---
+title: "Estudo Guiado 01 — Revisão de Logaritmos e Leitura de Formas Funcionais"
+subtitle: "Aula 7 · Pré-requisitos: propriedades do logaritmo natural, aproximação percentual e reconhecimento de modelos nível/log"
+author: "Guia de estudo da Loren Tavolaro"
+date: "`r format(Sys.Date(), '%d/%m/%Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    code_folding: show
+    theme: cosmo
+    highlight: tango
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, warning = FALSE, message = FALSE,
+  fig.align = "center", fig.width = 7, fig.height = 4.5
+)
+library(tidyverse)
+theme_set(theme_minimal(base_size = 12))
+```
+
+# Como usar este guia
+
+Este documento é para **estudo individual antes da Aula 7**, sobre **formas funcionais e modelos de elasticidade** (Wooldridge, Cap. 2, Seção 2.4). Antes de interpretar modelos com logaritmos, precisamos relembrar duas ferramentas:
+
+1. Propriedades básicas do **logaritmo natural**.
+2. A **aproximação percentual** $\Delta\log(x) \approx \%\Delta x/100$, que é o que dá sentido às interpretações de semi-elasticidade e elasticidade.
+
+Depois, você vai praticar **reconhecer** qual das quatro formas funcionais (nível-nível, nível-log, log-nível, log-log) está por trás de uma equação estimada, e **interpretar** o coeficiente corretamente em cada caso — essa é a habilidade central da Aula 7.
+
+Cada bloco tem um **código de referência** entre colchetes (ex.: `[Q1-1]`, `[Ex1-1]`) — use-o para conferir sua resposta no **Gabarito 01**, disponibilizado separadamente após a atividade.
+
+---
+
+# 1 — Propriedades do logaritmo natural (revisão)
+
+Vamos usar $\log(\cdot)$ para o **logaritmo natural** (base $e$), como a função `log()` do R. Três propriedades centrais:
+
+**(P1) Log do produto:** $\log(ab) = \log(a) + \log(b)$.
+
+**(P2) Log do quociente:** $\log(a/b) = \log(a) - \log(b)$.
+
+**(P3) Log da potência:** $\log(x^k) = k\log(x)$.
+
+```{r log-props-check}
+a <- 5; b <- 3; k <- 2
+
+c(log(a * b), log(a) + log(b))        # (P1)
+c(log(a / b), log(a) - log(b))        # (P2)
+c(log(a^k), k * log(a))               # (P3)
+```
+
+**🧠 Verifique seu entendimento `[Q1-1]`**
+
+> Se $x' = c\cdot x$ (multiplicamos $x$ por uma constante $c$, por exemplo ao trocar a unidade de medida), como podemos escrever $\log(x')$ em função de $\log(c)$ e $\log(x)$? Qual propriedade você usou?
+
+```{r resposta-Q1-1, eval=FALSE}
+# Sua resposta (Q1-1):
+# # Sua resposta (Q1-1): log(x´) = log(c) + log(x´) usamos a propriedade do logaritmo do produto
+```
+
+---
+
+# 2 — A aproximação percentual $\Delta\log(x) \approx \%\Delta x / 100$
+
+Essa aproximação (revisada no Apêndice A do livro-texto) é o que conecta "coeficiente de um modelo em log" com "efeito percentual". Ela funciona bem para variações **pequenas**, mas perde precisão para variações grandes.
+
+```{r aproximacao-log}
+x0 <- 100
+
+variacoes_percentuais <- c(1, 5, 10, 25, 50, 100)  # em %
+
+tibble(
+  variacao_percentual = variacoes_percentuais,
+  x1 = x0 * (1 + variacoes_percentuais / 100),
+) %>%
+  mutate(
+    delta_log_exato = log(x1) - log(x0),
+    aproximacao = variacao_percentual / 100,
+    erro_absoluto = abs(delta_log_exato - aproximacao)
+  ) %>%
+  knitr::kable(digits = 4, caption = "A aproximação Δlog(x) ≈ %Δx/100 piora conforme a variação percentual cresce")
+```
+
+**🧠 Verifique seu entendimento `[Q2-1]`**
+
+> Olhando a tabela acima: para uma variação de 1%, o erro da aproximação é bem pequeno. Para uma variação de 100%, o erro já é grande. Por que a aproximação funciona bem para mudanças pequenas e mal para mudanças grandes? (Dica: pense na aproximação linear da função $\log(\cdot)$ perto de um ponto.)
+
+```{r resposta-Q2-1, eval=FALSE}
+# Sua resposta (Q2-1):para mudanças pequenas, o logaritmo fica proximo de uma relaçao linear, por isso a aproximaçao funciona bem. quando a mudança é muito grande, a diferença entre a aproximaçao e o valor real aumenta
+```
+
+**💻 Exercício numérico 1 `[Ex1-1]`**
+
+Um modelo estimado é $\log(\text{salary}) = 4{,}822 + 0{,}257\,\log(\text{sales})$ (Wooldridge, Exemplo 2.11).
+
+(i) Use a aproximação (coeficiente × %Δx) para prever a variação percentual em `salary` associada a um aumento de **50%** em `sales`.
+(ii) Calcule o valor **exato** dessa variação percentual usando `exp()` (dica: se $\log(y_1)-\log(y_0) = \beta_1\log(1{,}5)$, então $y_1/y_0 = 1{,}5^{\beta_1}$).
+(iii) Os dois valores (i) e (ii) são parecidos ou bem diferentes? O que isso te diz sobre usar a aproximação linear para variações grandes?
+
+```{r ex1, eval=FALSE}
+beta1 <- 0.257
+
+# (i) Aproximação
+aproximacao_pct <- beta1 * 50
+
+# (ii) Valor exato
+razao_exata <- 1.5^beta1
+exato_pct <- (razao_exata - 1) * 100
+
+c(aproximacao = aproximacao_pct, exato = exato_pct)
+
+# (iii) Sua resposta:os valores sao proximos, mas nao sao iguais, a aproximaçao deu 12,85% e o valor exato deu 10,98%, isso mostra que a aproximaçao fica menos precisa quando a variaçao é maior
+```
+
+---
+
+# 3 — Praticando a leitura de formas funcionais
+
+Antes da Aula 7, pratique **identificar** a forma funcional de uma equação e **interpretar** $\beta_1$ corretamente — essa é a base da aula presencial.
+
+**💻 Exercício numérico 2 `[Ex2-1]`**
+
+Para cada equação abaixo: (a) diga se é nível-nível, nível-log, log-nível ou log-log; (b) escreva, em uma frase, o que $\hat\beta_1$ significa neste caso.
+
+(i) $\widehat{\text{consumo}} = 200 + 0{,}65\,\text{renda}$
+(ii) $\widehat{\log(\text{preço})} = 1{,}2 - 0{,}8\,\log(\text{quantidade})$
+(iii) $\widehat{\log(\text{salário})} = 2{,}1 + 0{,}05\,\text{anos\_empresa}$
+(iv) $\widehat{\text{horas\_trabalhadas}} = 40 + 2{,}5\,\log(\text{salário})$
+
+```{r ex2, eval=FALSE}
+# (i) Sua resposta:
+# nivel-nivel: se a renda aumentar 1 unidade, o consumo aumenta 0,65unidade
+
+# (ii) Sua resposta:
+# log-log: se a quantidade aumentar 1%, o preco diminui aprox. 0,8%
+
+# (iii) Sua resposta:
+# log-nivel: se os anos na empresa aumentarem em 1 ano, o salario aumenta aprox. 5%
+# (iv) Sua resposta:
+# nivel-log: se o salario aumentar 1%, as horas trabalhadas aumentam aprox. 0,025hora
+```
+
+**🧠 Verifique seu entendimento `[Q3-1]`**
+
+> Em qual das quatro formas funcionais o coeficiente $\hat\beta_1$ **é**, diretamente (sem multiplicar por 100 nem dividir por 100), a elasticidade de $y$ em relação a $x$? Por quê?
+
+```{r resposta-Q3-1, eval=FALSE}
+# Sua resposta (Q3-1): log-log, b1 mostra quanto y varia em porcentagem quando x aumenta 1%
+```
+
+---
+
+# Autoavaliação final
+
+Antes da Aula 7, tente responder sem consultar o material:
+
+1. Escreva as três propriedades do logaritmo que revisamos e dê um exemplo numérico de cada.
+***
+log(ab) = log(a) + log(b), ex: log(2*5) = log(2) + log(5).
+log(a/b) = log(a) - log(b), ex: log(10/2) = log(10) - log(2).
+log ($x^k$) = k*log(x),
+ex: log($2^3$) = 3*log(2).
+***
+2. Por que a aproximação $\Delta\log(x)\approx\%\Delta x/100$ funciona bem para variações pequenas, mas não para variações grandes?
+***
+funciona bem para variacoes pequenas porque, nesse caso, o logaritmo pode ser aproximado por uma relacao linear. para grandes variacoes, a aproximacao fica menos precisa porque o comportamento do logaritmo nao é exatamente linear.
+***
+3. Dado um modelo log-nível $\log(y)=\beta_0+\beta_1x+u$, como você calcula a variação percentual esperada em $y$ para um aumento de $k$ unidades em $x$?
+***
+no modelo log-nivel, para um aumento de k unidades em x, a variacao percentual esperada em y é aprox 100*b1*k %
+***
+4. Dado um modelo log-log $\log(y)=\beta_0+\beta_1\log(x)+u$, como você calcula a variação percentual esperada em $y$ para um aumento de $k\%$ em $x$?
+***
+no modelo log-log, b1 é a elasticidade, portanto, para um aumento de k% em x, a variacao percentual esperada em y é aprox b1*k%
+***
+5. Se você multiplicar $x$ por uma constante $c$ antes de aplicar o log, o que acontece com a inclinação e com o intercepto de um modelo log-log?
+***
+a inclinacao b1 permanece a mesma, o intercepto mudda para b0 - b1*log(c). portanto, a transformacao altera o intercepto, mas nao altera a inclinacao.
+***
+```{r termos-chave, echo=FALSE}
+tibble::tibble(
+  Termo = c("Propriedades do logaritmo", "Aproximação Δlog(x) ≈ %Δx/100",
+            "Forma funcional (nível/log)", "Semi-elasticidade", "Elasticidade")
+) %>%
+  knitr::kable(caption = "Termos-chave desta revisão — use para autoavaliação")
+```
+
+---
+
+*Pronto! Com essas ferramentas você está preparado(a) para a **Aula 7 — Formas Funcionais: Modelos de Elasticidade**. O gabarito deste guia será disponibilizado separadamente.*
