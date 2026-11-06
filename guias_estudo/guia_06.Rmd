@@ -220,5 +220,3 @@ tibble::tibble(
 ```
 
 ---
-
-*Pronto! Com este guia você está preparado(a) para a **Aula 6 — Medidas de Qualidade do Ajuste**. O gabarito deste guia será disponibilizado separadamente.*

@@ -1,0 +1,251 @@
+---
+title: "Estudo Guiado 01: A Variância do Estimador de MQO"
+subtitle: "Aula 11 · Da hipótese de homoscedasticidade à fórmula de Var(β̂₁) e ao erro-padrão (Wooldridge, Cap. 2, Seção 2.5)"
+author: "Guia de estudo da Loren Tavolaro"
+date: "`r format(Sys.Date(), '%d/%m/%Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    code_folding: show
+    theme: cosmo
+    highlight: tango
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, warning = FALSE, message = FALSE,
+  fig.align = "center", fig.width = 7, fig.height = 4.5
+)
+
+pacotes <- c("tidyverse", "wooldridge", "knitr")
+faltando <- pacotes[!(pacotes %in% installed.packages()[, "Package"])]
+if (length(faltando) > 0) {
+  install.packages(faltando, repos = "https://cloud.r-project.org")
+}
+
+library(tidyverse)
+library(wooldridge)
+library(knitr)
+
+theme_set(theme_minimal(base_size = 12))
+```
+
+# Como usar este guia
+
+Na Aula 11 usamos a fórmula $\text{Var}(\hat\beta_1)=\sigma^2/\text{SQT}_x$ sem demonstrá-la. Este guia reconstrói a demonstração passo a passo e fecha com o cálculo do erro-padrão. Ele pode ser feito antes ou depois da aula; o ideal é depois, com a aula fresca na memória.
+
+Você vai completar este `.Rmd` diretamente. Cada bloco tem um **código de referência** entre colchetes (ex.: `[Q1-1]`, `[Ex2-1]`). Use-o para conferir sua resposta no **Gabarito 01**, disponibilizado separadamente.
+
+**Pré-requisitos:** a derivação dos estimadores de MQO (Aula 3) e as hipóteses RLS.1 a RLS.5 (Aulas 4 e 11).
+
+## ⚠️ Atenção à notação
+
+Seguimos Wooldridge: $y=\beta_0+\beta_1x+u$, com $\beta_1$ = inclinação. Nos slides em notação de Gujarati, a inclinação é $\beta_2$ e o resultado aparece como $\text{Var}(\hat\beta_2)=\sigma^2/\sum x_i^2$, em que $x_i$ (minúsculo) já é o desvio em relação à média. É a mesma fórmula.
+
+| Papel | Wooldridge (usada aqui) | Gujarati |
+|---|---|---|
+| Inclinação | $\hat\beta_1$ | $\hat\beta_2$ |
+| Soma dos quadrados dos desvios de $x$ | $\text{SQT}_x=\sum_i(x_i-\bar x)^2$ | $\sum_i x_i^2$ (com $x_i$ em desvio) |
+| Variância da inclinação | $\sigma^2/\text{SQT}_x$ | $\sigma^2/\sum_i x_i^2$ |
+
+---
+
+# Revisão: três propriedades da variância
+
+Precisamos de três propriedades (Apêndice B de Wooldridge). Para constantes $a$ e $b$ e variáveis aleatórias $X$ e $Y$:
+
+- **(V1)** $\text{Var}(a)=0$ e $\text{Var}(a+bX)=b^2\,\text{Var}(X)$. Somar uma constante não muda a dispersão; multiplicar por $b$ multiplica a variância por $b^2$.
+- **(V2)** $\text{Var}(X+Y)=\text{Var}(X)+\text{Var}(Y)+2\,\text{Cov}(X,Y)$. Se $X$ e $Y$ são **não correlacionadas**, a covariância some.
+- **(V3)** Generalizando (V1) e (V2): se $u_1,\dots,u_n$ são não correlacionados entre si,
+$$\text{Var}\Big(\sum_{i=1}^n d_i u_i\Big)=\sum_{i=1}^n d_i^2\,\text{Var}(u_i).$$
+
+**🧠 Verifique seu entendimento `[Q1-1]`**
+
+> Por que, em (V1), a constante $b$ aparece **ao quadrado**? Dica: lembre que a variância é uma média de desvios **ao quadrado**.
+
+```{r resposta-Q1-1, eval=FALSE}
+# Sua resposta [Q1-1]:
+# a constante fica ao quadrado porque a variancia é calculada usando os desvios em relaçao a media elevados ao quadrado.por isso, multiplicar x por b multiplica sua variancia por b^2
+```
+
+**✏️ Exercício `[Ex1-1]`**
+
+Confira (V1) e (V3) por simulação. Sorteie 100 mil valores de três variáveis independentes $u_1,u_2,u_3$, cada uma com variância 4, e compare as variâncias simuladas com as teóricas.
+
+(i) $\text{Var}(5+3u_1)$ deveria ser $3^2\times 4 = 36$.
+
+(ii) $\text{Var}(2u_1-u_2+0{,}5u_3)$ deveria ser $(2^2+(-1)^2+0{,}5^2)\times 4 = ?$ Complete a conta antes de rodar.
+
+```{r ex1-1, eval=FALSE}
+set.seed(11)
+R <- 100000
+u1 <- rnorm(R, 0, 2)   # desvio-padrão 2, variância 4
+u2 <- rnorm(R, 0, 2)
+u3 <- rnorm(R, 0, 2)
+
+# (i)
+var(5 + 3 * u1)
+
+# (ii)
+var(2 * u1 - u2 + 0.5 * u3)
+(2^2 + (-1)^2 + 0.5^2) * 4    # valor teórico
+```
+
+---
+
+# Reescrevendo $\hat\beta_1$ em função dos erros
+
+Seja $d_i = x_i-\bar x$. Da Aula 3, $\hat\beta_1=\sum_i d_i y_i/\text{SQT}_x$ (o termo com $\bar y$ some porque $\sum_i d_i=0$). Substituindo $y_i=\beta_0+\beta_1x_i+u_i$:
+
+$$\hat\beta_1=\frac{\beta_0\sum_i d_i+\beta_1\sum_i d_i x_i+\sum_i d_i u_i}{\text{SQT}_x}.$$
+
+Usando $\sum_i d_i=0$ e $\sum_i d_i x_i=\text{SQT}_x$, chegamos à equação (2.52) do livro:
+
+$$\boxed{\hat\beta_1=\beta_1+\frac{1}{\text{SQT}_x}\sum_{i=1}^n d_i u_i}$$
+
+Leitura: $\hat\beta_1$ é o verdadeiro $\beta_1$ **mais um termo de erro amostral**, que é uma média ponderada dos erros $u_i$. Toda a aleatoriedade de $\hat\beta_1$ vem dos $u_i$.
+
+**🧠 Verifique seu entendimento `[Q2-1]`**
+
+> Na demonstração, tratamos $d_i$ e $\text{SQT}_x$ como **constantes**, e não como variáveis aleatórias. Por que isso é permitido? (Dica: o Teorema 2.2 é enunciado "condicionalmente aos valores amostrais de $x$".)
+
+```{r resposta-Q2-1, eval=FALSE}
+# Sua resposta [Q2-1]:
+# consideramos os valores de x da amostra como fixos, por isso, di e SQTx sao constantes na demonstraçao. a aleatoridade do estimador vem dos erros ui
+```
+
+**✏️ Exercício `[Ex2-1]`**
+
+Num exemplo simulado conhecemos os erros verdadeiros $u_i$ (o que nunca acontece com dados reais). Use isso para verificar a equação (2.52): calcule $\hat\beta_1$ pelo `lm()` e pelo lado direito da equação.
+
+```{r ex2-1, eval=FALSE}
+set.seed(2052)
+n <- 30
+x <- runif(n, 0, 10)
+u <- rnorm(n, 0, 2)
+beta0 <- 1; beta1 <- 0.5
+y <- beta0 + beta1 * x + u
+
+d     <- mean(x)
+SQT_x <- sum(d^2)
+
+beta1_lm      <- coef(lm(y ~ x))[2]
+beta1_formula <- beta1 + sum(d*u)/SQT_x
+
+c(beta1_lm = beta1_lm, beta1_formula = beta1_formula)
+```
+
+---
+
+# Derivando $\text{Var}(\hat\beta_1)$
+
+Partindo da equação (2.52) e lembrando que $\beta_1$, $d_i$ e $\text{SQT}_x$ são constantes (condicionalmente a $x$):
+
+$$\text{Var}(\hat\beta_1)=\text{Var}\Big(\beta_1+\frac{1}{\text{SQT}_x}\sum_i d_iu_i\Big)\overset{(a)}{=}\Big(\frac{1}{\text{SQT}_x}\Big)^2\text{Var}\Big(\sum_i d_iu_i\Big)\overset{(b)}{=}\Big(\frac{1}{\text{SQT}_x}\Big)^2\sum_i d_i^2\,\text{Var}(u_i)$$
+
+$$\overset{(c)}{=}\Big(\frac{1}{\text{SQT}_x}\Big)^2\sum_i d_i^2\,\sigma^2\overset{(d)}{=}\frac{\sigma^2}{\text{SQT}_x^2}\,\text{SQT}_x=\frac{\sigma^2}{\text{SQT}_x}.$$
+
+**✏️ Exercício `[Ex3-1]`**
+
+Para cada uma das quatro passagens, (a) a (d), diga qual propriedade da Seção 2 **ou** qual hipótese (RLS.1 a RLS.5) foi usada.
+
+```{r resposta-Ex3-1, eval=FALSE}
+# Sua resposta [Ex3-1]:
+# (a) propriedades da variancia, somar uma constante nao aletra a variancia e multiplicar por uma constante gera b^2.
+# (b) propriedade da variancia de uma soma e erros nao correlacionados.
+# (c) hipotese RLS5 (homocedasticidade)
+# (d) definiçao de SQTx que é a soma dos di^2
+```
+
+**🧠 Verifique seu entendimento `[Q3-1]`**
+
+> Se a hipótese RLS.5 falhar, em que passagem a demonstração "quebra"? O que acontece com a fórmula final? E o não-viesamento de $\hat\beta_1$ é afetado?
+
+```{r resposta-Q3-1, eval=FALSE}
+# Sua resposta [Q3-1]:
+# a demonstraçao deixa de valer na passagem (c), pois as variancias dos erros nao sao iguais quando ha heterocedasticidade. nesse caso, a formula usual da variancia de beta1 nao é valida. porem, o estimador continua nao viesado se RLS4 for satisfeita.
+```
+
+---
+
+# Graus de liberdade e o estimador $\hat\sigma^2$
+
+Como $\sigma^2$ é desconhecido, estimamos com $\hat\sigma^2=\text{SQR}/(n-2)$. A divisão por $n-2$ vem das duas restrições que os resíduos sempre satisfazem: $\sum_i\hat u_i=0$ e $\sum_i x_i\hat u_i=0$.
+
+Vamos usar o exemplo pequeno do checkpoint da Aula 3, em que $\hat\beta_0=2{,}2$ e $\hat\beta_1=0{,}6$:
+
+| $i$ | $x_i$ | $y_i$ |
+|---|---|---|
+| 1 | 1 | 2 |
+| 2 | 2 | 4 |
+| 3 | 3 | 5 |
+| 4 | 4 | 4 |
+| 5 | 5 | 5 |
+
+**✏️ Exercício `[Ex4-1]`**
+
+(i) Os três primeiros resíduos são $\hat u_1=-0{,}8$, $\hat u_2=0{,}6$ e $\hat u_3=1{,}0$. **Sem usar a reta estimada**, apenas com as duas restrições acima, descubra $\hat u_4$ e $\hat u_5$. (Monte um sistema de duas equações e duas incógnitas.)
+
+(ii) Confira sua resposta no R e calcule $\text{SQR}$, $\hat\sigma^2$, $\hat\sigma$ e $\text{ep}(\hat\beta_1)=\hat\sigma/\sqrt{\text{SQT}_x}$. Compare com o `summary()`.
+
+```{r ex4-1, eval=FALSE}
+X <- c(1, 2, 3, 4, 5)
+Y <- c(2, 4, 5, 4, 5)
+mod <- lm(Y ~ X)
+
+u_hat <- resid(mod)
+u_hat
+
+SQR        <- sum(u_hat^2)
+sigma2_hat <- SQR / (length(Y)-2)
+sigma_hat  <- sqrt(sigma2_hat)
+SQT_x      <- sum((X - mean(X))^2)
+ep_beta1   <- sigma_hat / sqrt(SQT_x)
+
+c(SQR = SQR, sigma2_hat = sigma2_hat, sigma_hat = sigma_hat, ep_beta1 = ep_beta1)
+summary(mod)
+```
+
+**🧠 Verifique seu entendimento `[Q4-1]`**
+
+> O item (i) mostrou que, conhecendo 3 dos 5 resíduos, os outros 2 ficam determinados. Relacione isso com o número de graus de liberdade usado no denominador de $\hat\sigma^2$. Quantos graus de liberdade teríamos numa regressão múltipla com $k=3$ regressores e $n=88$ observações?
+
+```{r resposta-Q4-1, eval=FALSE}
+# Sua resposta [Q4-1]:
+# os graus de liberdade sao n-k-1 porque estimamos k coeficientes para os regressores e mais o intercepto. com 88 observaçoes e 3 regressores, temos 84 graus de liberdade
+```
+
+---
+
+# Aplicação: erro-padrão no modelo em nível de WAGE1
+
+Na aula vimos que o modelo $\text{wage}=\beta_0+\beta_1\,\text{educ}+u$ apresenta sinais claros de heteroscedasticidade (Exemplo 2.13).
+
+**✏️ Exercício `[Ex5-1]`**
+
+(i) Estime o modelo e calcule na mão $\hat\sigma$ e $\text{ep}(\hat\beta_1)$. Confira com o `summary()`.
+
+(ii) Interprete $\hat\sigma$ na unidade de `wage`.
+
+(iii) O `Std. Error` que você acabou de reproduzir está certo do ponto de vista **aritmético**. Ele é uma boa medida da imprecisão de $\hat\beta_1$ **neste modelo**? Responda usando o que você concluiu em `[Q3-1]`.
+
+```{r ex5-1, eval=FALSE}
+data(wage1)
+mod_wage <- lm(wage ~ educ, data = wage1)
+
+n <- nobs(mod_wage)
+sigma_hat <- sqrt(sum(resid(mod_wage)^2) / (n-2))
+SQT_educ  <- sum((wage1$educ - mean(wage1$educ))^2)
+ep_educ   <- sigma_hat/sqrt(SQT_educ)
+
+c(sigma_hat = sigma_hat, ep_educ = ep_educ)
+summary(mod_wage)
+
+# (ii) e (iii): o sigma estimado representa a dispersao dos salarios em torno dos valores previstos pelo modelo, em dolares por hora. o erro-padrao usual pode nao ser confiavel porque o modelo apresenta sinais de heterocedasticidade. nesse caso, a formula usual da variancia nao e valida, podemos usar erros-padrao robustos a heterocedasticidade.
+#
+```
+
+---

@@ -305,5 +305,3 @@ tibble::tibble(
 ```
 
 ---
-
-*Bons estudos! Leve suas dúvidas e as respostas dos exercícios 4 e 5 para discussão em aula — eles antecipam a grande questão do curso: como estimar efeitos causais com dados não experimentais.*

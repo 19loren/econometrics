@@ -1,0 +1,239 @@
+---
+title: "Estudo Guiado 01: Testes t e F no Papel e no R"
+subtitle: "Aula 12 · Valores críticos, regra de rejeição e estatística F a partir de resultados publicados (Wooldridge, Cap. 4)"
+author: "Guia de estudo da Loren Tavolaro"
+date: "`r format(Sys.Date(), '%d/%m/%Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    code_folding: show
+    theme: cosmo
+    highlight: tango
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, warning = FALSE, message = FALSE,
+  fig.align = "center", fig.width = 7, fig.height = 4.5
+)
+
+pacotes <- c("tidyverse", "wooldridge", "knitr")
+faltando <- pacotes[!(pacotes %in% installed.packages()[, "Package"])]
+if (length(faltando) > 0) {
+  install.packages(faltando, repos = "https://cloud.r-project.org")
+}
+
+library(tidyverse)
+library(wooldridge)
+library(knitr)
+
+theme_set(theme_minimal(base_size = 12))
+```
+
+# Como usar este guia
+
+Na Aula 12 fizemos os testes t e F a partir de modelos estimados no R. Em artigos, relatórios e **provas**, porém, os resultados costumam vir prontos: uma equação com os erros-padrão entre parênteses, o $n$ e o $R^2$. Este guia treina exatamente isso: montar e decidir os testes a partir de resultados publicados, usando o R apenas como "tabela" de valores críticos e para conferir.
+
+Você vai completar este `.Rmd` diretamente. Cada bloco tem um **código de referência** entre colchetes (ex.: `[Q1-1]`, `[Ex2-1]`). Use-o para conferir sua resposta no **Gabarito 01**, disponibilizado separadamente.
+
+**Pré-requisitos:** erro-padrão e graus de liberdade (Aula 11) e a Aula 12.
+
+## ⚠️ Atenção à notação
+
+Seguimos Wooldridge: $k$ regressores **mais** o intercepto, e graus de liberdade $n-k-1$. Nos slides em notação de Gujarati, $k$ já inclui o intercepto e os graus de liberdade aparecem como $n-k$. Antes de buscar um valor crítico, confira sempre **quantos parâmetros** foram estimados.
+
+| Situação | Wooldridge (usada aqui) | Gujarati |
+|---|---|---|
+| Regressão simples | $n-2$ | $n-2$ |
+| 3 regressores + intercepto | $n-3-1=n-4$ | $n-4$ (com $k=4$) |
+
+---
+
+# Valores críticos no R
+
+No R, `qt(p, df)` devolve o quantil $p$ da distribuição $t$ com `df` graus de liberdade, e `qf(p, df1, df2)` o quantil da $F$. Eles substituem as tabelas do Apêndice G do livro.
+
+| Teste | Nível $\alpha$ | Comando |
+|---|---|---|
+| t unilateral à direita | 5% | `qt(0.95, gl)` |
+| t unilateral à esquerda | 5% | `-qt(0.95, gl)` |
+| t bilateral | 5% | `qt(0.975, gl)` |
+| F com $q$ restrições | 5% | `qf(0.95, q, gl)` |
+
+**🧠 Verifique seu entendimento `[Q1-1]`**
+
+> Por que, no teste bilateral a 5%, usamos o quantil 0,975 e não 0,95? E por que o teste F, que também testa "diferente de", usa o quantil 0,95?
+
+```{r resposta-Q1-1, eval=FALSE}
+# Sua resposta [Q1-1]:
+# no teste t bilateral, dividimos os 5% entre as duas caudas, ficando 2,5% em cada uma. por isso usamos o quantil 0.975. no teste f, a rejeicao ocorre apenas na cauda direita, entao usamos o quartil 0.95
+```
+
+**✏️ Exercício `[Ex1-1]`**
+
+Complete a tabela de valores críticos **bilaterais** a 5% para diferentes graus de liberdade e compare com o valor da normal padrão (`qnorm(0.975)`). A partir de quantos graus de liberdade a diferença fica menor que 0,02?
+
+```{r ex1-1, eval=FALSE}
+gl <- c(5, 10, 30, 60, 120, 500)
+
+tibble(
+  gl = gl,
+  c_t = qt(0.975, df = gl),
+  c_normal = qnorm(0.975)
+) %>%
+  mutate(diferenca = c_t - c_normal)
+```
+
+---
+
+# Teste t a partir de resultados publicados
+
+O Exemplo 4.8 de Wooldridge (dataset `rdchem`) estuda os gastos com pesquisa e desenvolvimento de 32 empresas do setor químico dos EUA. O resultado é reportado assim (erros-padrão entre parênteses):
+
+$$\widehat{\log(\text{rd})}=\underset{(0{,}47)}{-4{,}38}+\underset{(0{,}060)}{1{,}084}\,\log(\text{sales})+\underset{(0{,}0128)}{0{,}0217}\,\text{profmarg}$$
+$$n=32,\qquad R^2=0{,}918$$
+
+em que `rd` são os gastos anuais em P&D (milhões de US\$), `sales` são as vendas anuais (milhões de US\$) e `profmarg` é a margem de lucro (lucro como % das vendas).
+
+**✏️ Exercício `[Ex2-1]`**
+
+Usando **apenas** os números da equação acima (sem estimar nada):
+
+(i) Quantos graus de liberdade tem a estatística t?
+
+(ii) Teste, a 5%, a hipótese de que os gastos em P&D crescem **na mesma proporção** das vendas: $H_0:\beta_1=1$ contra $H_1:\beta_1\neq1$.
+
+(iii) Teste, a 5%, se a margem de lucro aumenta os gastos em P&D: $H_0:\beta_2=0$ contra $H_1:\beta_2>0$. Repita a 10%.
+
+```{r ex2-1, eval=FALSE}
+# (i)
+gl <- 32-2-1
+
+# (ii)
+t_vendas <- (1.084 - 1) / 0.060
+c(t = t_vendas, c5 = qt(0.975, gl))
+
+# (iii)
+t_margem <- 0.0217 / 0.0128
+c(t = t_margem, c5 = qt(0.95, gl), c10 = qt(0.90, gl))
+
+# Suas conclusões:
+# nao rejeitamos h0 a 5% pois \t\ é menor que o valor crítico, e nao rejeitamos h0 a 5%, mas rejeitamos a 10%.
+```
+
+**🧠 Verifique seu entendimento `[Q2-1]`**
+
+> No item (iii), suponha que um colega tivesse usado a alternativa **bilateral** a 10%. A decisão seria a mesma da unilateral a 10%? E a da unilateral a 5%? Explique o que muda entre os três casos, observando que a estatística $t$ é a mesma em todos eles.
+
+```{r resposta-Q2-1, eval=FALSE}
+# Sua resposta [Q2-1]:
+# a decisao muda conforme o nivel de significancia e o tipo de teste. no unilateral a 10%, rejeitamos h0 porque a estatistica t é maior que o valor critico, aprox 1,311. no bilateral a 10% e no unilateral a 5%, nao rejeitamos h0, pois o valor cirtico é aprox 1,699. a estatistica t é a mesma, mas a regra de rejeicao muda
+```
+
+---
+
+# Teste F a partir dos $R^2$
+
+O Exemplo 4.9 de Wooldridge (dataset `bwght`) estuda o peso de recém-nascidos (`bwght`, em onças) em função do número de cigarros fumados por dia pela mãe na gravidez (`cigs`), da ordem de nascimento (`parity`), da renda familiar (`faminc`) e da escolaridade da mãe (`motheduc`) e do pai (`fatheduc`). A pergunta é se a escolaridade dos pais importa, mantidos os demais fatores: $H_0:\beta_{\text{motheduc}}=\beta_{\text{fatheduc}}=0$.
+
+Os resultados reportados são:
+
+| Modelo | Regressores | $n$ | $R^2$ |
+|---|---|---|---|
+| Irrestrito | `cigs`, `parity`, `faminc`, `motheduc`, `fatheduc` | 1.191 | 0,0387 |
+| Restrito | `cigs`, `parity`, `faminc` | 1.191 | 0,0364 |
+
+**✏️ Exercício `[Ex3-1]`**
+
+(i) Quais são $q$, $k$ e $n-k-1$?
+
+(ii) Calcule a estatística F na forma $R^2$, usando os números da tabela.
+
+(iii) Encontre o valor crítico a 5% e decida.
+
+(iv) Agora confira no R: estime os dois modelos e use `anova()`. **Cuidado:** leia `[Q3-1]` antes de estimar o modelo restrito.
+
+```{r ex3-1, eval=FALSE}
+# (i)
+q <- 2; k <- 5; n <- 1191
+gl <- n-k-1
+
+# (ii)
+R2_ir <- 0.0387; R2_r <- 0.0364
+F_stat <- ((R2_ir - R2_r)/q)/((1-R2_ir)/gl)
+F_stat
+
+# (iii)
+qf(0.95, q, gl)
+
+# (iv)
+data(bwght)
+mod_ir <- lm(bwght ~ cigs + parity + faminc + motheduc + fatheduc, data = bwght)
+nobs(mod_ir)
+# estime o modelo restrito na MESMA amostra do irrestrito:
+mod_r <- lm(bwght ~ cigs + parity + faminc, data = model.frame(mod_ir))
+nobs(mod_r)
+anova(mod_r, mod_ir)
+```
+
+**🧠 Verifique seu entendimento `[Q3-1]`**
+
+> O dataset `bwght` tem 1.388 bebês, mas o modelo irrestrito usa só 1.191. Por quê? O que daria errado no teste F se estimássemos o modelo restrito com todas as 1.388 observações? (Dica: compare `nobs()` e o $R^2$ do restrito estimado das duas formas.)
+
+```{r resposta-Q3-1, eval=FALSE}
+# Sua resposta [Q3-1]:
+# o modelo irrestrito usa menos observaçoes porque algumas variaveis tem valores ausentes. se o modelo restrito usar todas as observacoes disponiveis, a comparacao dos r^2 nao sera valida, pois as amostras serao diferentes. por isso, estimamos os dois modelos com as mesmas observaçoes
+```
+
+---
+
+# Juntando tudo com GPA1
+
+Volte ao modelo do Exemplo 4.3 da aula: $\text{colGPA}=\beta_0+\beta_1\,\text{hsGPA}+\beta_2\,\text{ACT}+\beta_3\,\text{skipped}+u$.
+
+**✏️ Exercício `[Ex4-1]`**
+
+(i) Um coordenador afirma que "cada ponto a mais no ensino médio vale meio ponto na faculdade". Teste $H_0:\beta_1=0{,}5$ contra $H_1:\beta_1\neq0{,}5$ a 5%.
+
+(ii) Teste a 5% se `ACT` e `skipped` são conjuntamente significantes, nas formas SQR e $R^2$. Confira com `anova()`.
+
+```{r ex4-1, eval=FALSE}
+data(gpa1)
+mod_ir <- lm(colGPA ~ hsGPA + ACT + skipped, data = gpa1)
+gl <- df.residual(mod_ir)
+
+# (i)
+b1  <- coef(mod_ir)["hsGPA"]
+ep1 <- coef(summary(mod_ir))["hsGPA", "Std. Error"]
+t_05 <- (b1 - 0.5)/ep1
+c(t = t_05, c5 = qt(0.975, gl))
+
+# (ii)
+mod_r <- lm(colGPA ~ hsGPA, data = gpa1)
+q <- 2
+SQR_ir <- sum(resid(mod_ir)^2)
+SQR_r <- sum(resid(mod_r)^2)
+
+F_SQR <- ((SQR_r - SQR_ir)/q) / (SQR_ir/gl)
+
+R2_ir <- summary(mod_ir)$r.squared
+R2_r <- summary(mod_r)$r.squared
+
+F_R2  <- ((R2_ir - R2_r)/q)/ ((1 - R2_ir) / gl)
+c(F_SQR = F_SQR, F_R2 = F_R2, c5 = qf(0.95,q,gl))
+anova(mod_r, mod_ir)
+```
+
+**🧠 Verifique seu entendimento `[Q4-1]`**
+
+> Na aula, `skipped` foi individualmente significante a 1%. Isso garante que o teste F de `ACT` e `skipped` **juntos** vai rejeitar $H_0$? Pense no que acontece com o numerador do F quando se acrescenta ao bloco uma variável que quase não reduz a SQR.
+
+```{r resposta-Q4-1, eval=FALSE}
+# Sua resposta [Q4-1]:
+# nao, a significancia individual de skipped nao garante q ACT e skipped sejam conjuntamente significantes. o teste f avalia o efeito das duas variaveis em conjunto. se a reduçao da SQR nao for suficiente, podemos nao rejeitar h0
+```
+
+---

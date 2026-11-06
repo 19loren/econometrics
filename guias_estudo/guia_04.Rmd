@@ -216,5 +216,3 @@ tibble::tibble(
 ```
 
 ---
-
-*Pronto! Com este guia você está preparado(a) para a **Aula 4 — Hipóteses do Modelo Clássico**. O gabarito deste guia será disponibilizado separadamente.*
